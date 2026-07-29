@@ -35,7 +35,9 @@
 
 推荐从仓库的 **Releases** 页面下载：
 
-`璀璨宝石-Portable-x64.exe`
+`Brilliant-Gems-Portable-x64.exe`
+
+> GitHub Release 使用上述 ASCII 文件名以确保下载链接在不同客户端中稳定；本地执行 `npm run package` 构建时，产物仍为 `release/璀璨宝石-Portable-x64.exe`。
 
 下载后直接双击运行，无需安装。便携版会在启动时将运行资源解压到临时目录，首次看到窗口前可能需要等待约 20-30 秒。
 
