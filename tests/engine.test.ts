@@ -3,8 +3,8 @@ import { chooseAiMove } from '../src/game/ai'
 import { applyMove, canAfford, listLegalMoves, setupGame, totalTokens } from '../src/game/engine'
 import type { Difficulty, GameState, Move } from '../src/game/types'
 
-function game(aiDifficulties: Difficulty[] = ['normal'], seed = 42): GameState {
-  return setupGame({ seed, playerName: '测试玩家', aiDifficulties })
+function game(aiDifficulties: Difficulty[] = ['normal'], seed = 42, targetPrestige?: number, playerSeat?: number): GameState {
+  return setupGame({ seed, playerName: '测试玩家', aiDifficulties, targetPrestige, playerSeat })
 }
 
 function apply(state: GameState, move: Move): GameState {
@@ -35,6 +35,21 @@ describe('对局初始化', () => {
   it('相同种子得到相同牌序，不同种子得到不同牌序', () => {
     expect(game(['normal'], 11).market).toEqual(game(['normal'], 11).market)
     expect(game(['normal'], 11).market).not.toEqual(game(['normal'], 12).market)
+  })
+
+  it('可以在开局配置胜利所需威望，并写入状态', () => {
+    expect(game(['normal'], 42, 21).targetPrestige).toBe(21)
+    expect(game(['normal'], 42).targetPrestige).toBe(15)
+  })
+
+  it('按选择的号位排列玩家，并由 1 号位先手', () => {
+    const state = game(['easy', 'normal', 'hard'], 42, 15, 3)
+    expect(state.players.map((player) => player.isHuman)).toEqual([false, false, true, false])
+    expect(state.players.findIndex((player) => player.isHuman)).toBe(2)
+    expect(state.currentPlayer).toBe(0)
+    expect(state.players[0].difficulty).toBe('easy')
+    expect(state.players[1].difficulty).toBe('normal')
+    expect(state.players[3].difficulty).toBe('hard')
   })
 })
 
@@ -127,9 +142,32 @@ describe('购牌、贵族与终局', () => {
     if (state.pending?.kind === 'noble') state = apply(state, listLegalMoves(state)[0])
     expect(state.result?.winnerIds).toEqual(['player-1'])
   })
+
+  it('使用自定义威望目标触发终局', () => {
+    let state = game(['normal'], 42, 18)
+    state.players[0].prestige = 18
+    state = apply(state, { type: 'takeDistinct', colors: ['diamond', 'sapphire', 'emerald'] })
+    expect(state.endTriggeredBy).toBe('player-0')
+  })
 })
 
 describe('AI 合法性', () => {
+  it('普通 AI 会优先购买能达到胜利线的牌', () => {
+    const state = game(['normal'], 77, 15)
+    state.currentPlayer = 1
+    const ai = state.players[1]
+    ai.prestige = 14
+    const finisher = state.market[3][0]
+    finisher.prestige = 1
+    finisher.cost = { diamond: 0, sapphire: 0, emerald: 0, ruby: 0, onyx: 0 }
+    for (const card of [...state.market[1], ...state.market[2], ...state.market[3]]) {
+      card.cost = { diamond: 0, sapphire: 0, emerald: 0, ruby: 0, onyx: 0 }
+      if (card.id !== finisher.id) card.prestige = 0
+    }
+
+    expect(chooseAiMove(state)).toEqual({ type: 'buy', source: { kind: 'market', tier: 3, cardId: finisher.id } })
+  })
+
   it.each(['easy', 'normal', 'hard'] as const)('%s AI 能完成整局且只执行合法动作', (difficulty) => {
     let state = game([difficulty], 100 + difficulty.length)
     let actions = 0

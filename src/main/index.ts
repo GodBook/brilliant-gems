@@ -16,7 +16,10 @@ const settingsSchema = z.object({
   effectsVolume: z.number().min(0).max(1),
   reducedMotion: z.boolean(),
   fullscreen: z.boolean(),
-  aiSpeed: z.union([z.literal(0), z.literal(1), z.literal(2)])
+  aiSpeed: z.union([z.literal(0), z.literal(1), z.literal(2)]),
+  showOpponentTokens: z.boolean().default(DEFAULT_SETTINGS.showOpponentTokens),
+  showOpponentReserved: z.boolean().default(DEFAULT_SETTINGS.showOpponentReserved),
+  markAffordableCards: z.boolean().default(DEFAULT_SETTINGS.markAffordableCards)
 })
 
 function dataPath(filename: string): string {

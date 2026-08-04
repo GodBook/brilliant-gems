@@ -2,7 +2,6 @@ import { BookmarkPlus, LockKeyhole, ShoppingBag } from 'lucide-react'
 import { canAfford } from '../../../game/engine'
 import { costEntries, GEM_META } from '../../../game/data'
 import type {
-  BaseGem,
   DevelopmentCard,
   GameState,
   GemColor,
@@ -10,6 +9,7 @@ import type {
   PlayerState,
   Tier
 } from '../../../game/types'
+import { TOKEN_GEMS } from '../../../game/types'
 
 export function GemMark({ color, size = 'normal' }: { color: GemColor; size?: 'small' | 'normal' | 'large' }) {
   return (
@@ -34,6 +34,7 @@ interface CardProps {
   selected?: boolean
   compact?: boolean
   hidden?: boolean
+  markAffordable?: boolean
   disabled?: boolean
   onSelect?: () => void
 }
@@ -44,6 +45,7 @@ export function DevelopmentCardView({
   selected = false,
   compact = false,
   hidden = false,
+  markAffordable = true,
   disabled = false,
   onSelect
 }: CardProps) {
@@ -59,7 +61,7 @@ export function DevelopmentCardView({
   const Tag = onSelect ? 'button' : 'div'
   return (
     <Tag
-      className={`development-card tier-${card.tier} bonus-${card.bonus} ${selected ? 'is-selected' : ''} ${affordable ? 'is-affordable' : ''} ${compact ? 'is-compact' : ''}`}
+      className={`development-card tier-${card.tier} bonus-${card.bonus} ${selected ? 'is-selected' : ''} ${affordable && markAffordable ? 'is-affordable' : ''} ${compact ? 'is-compact' : ''}`}
       onClick={onSelect}
       disabled={onSelect ? disabled : undefined}
       aria-pressed={onSelect ? selected : undefined}
@@ -75,7 +77,7 @@ export function DevelopmentCardView({
           <GemAmount key={color} color={color} count={amount} />
         ))}
       </div>
-      {affordable && !compact ? <span className="affordable-mark"><ShoppingBag size={12} />可购</span> : null}
+      {affordable && markAffordable && !compact ? <span className="affordable-mark"><ShoppingBag size={12} />可购</span> : null}
     </Tag>
   )
 }
@@ -145,26 +147,37 @@ export function NobleTile({
   )
 }
 
-export function PlayerStrip({ player, active }: { player: PlayerState; active: boolean }) {
+export function PlayerStrip({ player, active, showTokens, showReserved }: { player: PlayerState; active: boolean; showTokens: boolean; showReserved: boolean }) {
+  const avatar = player.isHuman ? null : player.id === 'player-1' ? 'assets/ai-ashes.svg' : player.id === 'player-2' ? 'assets/ai-verdant.svg' : 'assets/ai-crimson.svg'
   return (
     <section className={`player-strip ${active ? 'is-active' : ''}`} aria-label={`${player.name}的状态`}>
       <div className="player-identity">
-        <span className="player-seal">{player.name.slice(0, 1)}</span>
+        <span className="player-seal">{avatar ? <img src={avatar} alt="" draggable={false} /> : player.name.slice(0, 1)}</span>
         <div>
           <strong>{player.name}</strong>
           <span>{player.difficulty === 'easy' ? '简单' : player.difficulty === 'hard' ? '困难' : '普通'} AI</span>
         </div>
       </div>
       <div className="player-score"><b>{player.prestige}</b><span>威望</span></div>
-      <div className="mini-assets" aria-label="永久折扣">
-        {(['diamond', 'sapphire', 'emerald', 'ruby', 'onyx'] as BaseGem[]).map((color) => (
-          <GemAmount key={color} color={color} count={player.bonuses[color]} subtle />
-        ))}
+      <div className="mini-assets" aria-label={showTokens ? '筹码数量' : '筹码数量已隐藏'}>
+        {showTokens ? TOKEN_GEMS.map((color) => (
+          <GemAmount key={color} color={color} count={player.tokens[color]} subtle />
+        )) : <span className="privacy-hidden">筹码数已隐藏</span>}
       </div>
       <div className="strip-meta">
         <span>{player.purchased.length} 张发展卡</span>
-        <span>{player.reserved.length} 张保留</span>
-        <span>{totalPlayerTokens(player)} 枚筹码</span>
+        {showReserved ? (
+          <div className="reserved-preview" aria-label={`${player.reserved.length} 张保留牌`}>
+            {player.reserved.length === 0 ? <span className="privacy-hidden">无保留牌</span> : player.reserved.map(({ card, revealed }) => revealed ? (
+              <span key={card.id} className={`reserved-chip bonus-${card.bonus}`} title={`${card.tier} 阶${GEM_META[card.bonus].label}发展卡，${card.prestige} 点威望`}>
+                <GemMark color={card.bonus} size="small" /><b>{card.prestige || '·'}</b>
+              </span>
+            ) : (
+              <span key={card.id} className="reserved-chip is-hidden" title="暗抽保留牌"><LockKeyhole size={11} /></span>
+            ))}
+          </div>
+        ) : <span className="privacy-hidden">保留牌已隐藏</span>}
+        {showTokens ? <span>{totalPlayerTokens(player)} 枚筹码</span> : null}
       </div>
       {active ? <span className="turn-indicator">行动中</span> : null}
     </section>
@@ -180,6 +193,7 @@ export function MarketRows({
   selectedCardId,
   selectedDeck,
   interactive,
+  markAffordable,
   onCard,
   onDeck
 }: {
@@ -187,6 +201,7 @@ export function MarketRows({
   selectedCardId: string | null
   selectedDeck: Tier | null
   interactive: boolean
+  markAffordable: boolean
   onCard: (card: DevelopmentCard) => void
   onDeck: (tier: Tier) => void
 }) {
@@ -207,6 +222,7 @@ export function MarketRows({
               key={card.id}
               card={card}
               player={player}
+              markAffordable={markAffordable}
               selected={selectedCardId === card.id}
               disabled={!interactive}
               onSelect={() => onCard(card)}
@@ -217,4 +233,3 @@ export function MarketRows({
     </div>
   )
 }
-

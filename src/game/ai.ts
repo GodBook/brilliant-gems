@@ -29,9 +29,36 @@ function nobleProgress(state: GameState, playerIndex: number, bonusColor?: BaseG
   }, 0)
 }
 
+function nobleDemand(state: GameState, playerIndex: number, color: BaseGem): number {
+  const player = state.players[playerIndex]
+  return state.nobles.reduce((best, noble) => {
+    return Math.max(best, Math.max(0, noble.requirement[color] - player.bonuses[color]))
+  }, 0)
+}
+
+function targetFinishValue(state: GameState, playerIndex: number, prestigeGain: number): number {
+  const player = state.players[playerIndex]
+  const after = player.prestige + prestigeGain
+  if (after >= state.targetPrestige) return 950 + Math.max(0, after - state.targetPrestige) * 24
+  return (after / state.targetPrestige) * 24
+}
+
+function opponentPressure(state: GameState, playerIndex: number, card: DevelopmentCard): number {
+  let pressure = 0
+  for (let index = 0; index < state.players.length; index += 1) {
+    if (index === playerIndex) continue
+    const opponent = state.players[index]
+    if (!canAfford(opponent, card)) continue
+    pressure += 8 + card.prestige * 13
+    if (opponent.prestige + card.prestige >= state.targetPrestige) pressure += 260
+    else if (opponent.prestige >= state.targetPrestige - 3) pressure += 55
+  }
+  return pressure
+}
+
 function immediateMoveScore(state: GameState, move: Move, playerIndex: number): number {
   const player = state.players[playerIndex]
-  if (move.type === 'chooseNoble') return 160
+  if (move.type === 'chooseNoble') return 220
   if (move.type === 'discard') {
     let penalty = 0
     for (const color of TOKEN_GEMS) {
@@ -46,25 +73,47 @@ function immediateMoveScore(state: GameState, move: Move, playerIndex: number): 
     if (!card) return -1000
     const payment = paymentForCard(player, card)
     const paymentSize = payment ? totalTokens(payment) : 20
+    const blockValue = move.source.kind === 'market' ? opponentPressure(state, playerIndex, card) : 0
+    const engineValue = card.prestige === 0 ? 18 + cardDemand(state, playerIndex, card.bonus) * 0.06 : 0
     return (
-      card.prestige * 42 +
-      card.tier * 3 +
-      nobleProgress(state, playerIndex, card.bonus) * 13 -
-      paymentSize * 1.4 +
-      (card.prestige === 0 ? cardDemand(state, playerIndex, card.bonus) * 0.025 : 0)
+      card.prestige * 48 +
+      targetFinishValue(state, playerIndex, card.prestige) +
+      card.tier * 4 +
+      nobleProgress(state, playerIndex, card.bonus) * 16 +
+      blockValue -
+      paymentSize * 1.25 +
+      engineValue
     )
   }
   if (move.type === 'takeDistinct') {
-    return move.colors.reduce((score, color) => score + 5 + cardDemand(state, playerIndex, color) * 0.06, 0)
+    return move.colors.reduce(
+      (score, color) =>
+        score +
+        5 +
+        cardDemand(state, playerIndex, color) * 0.08 +
+        nobleDemand(state, playerIndex, color) * 1.8 -
+        (state.supply[color] <= 1 ? 9 : state.supply[color] === 2 ? 3 : 0),
+      0
+    )
   }
   if (move.type === 'takeDouble') {
-    return 10 + cardDemand(state, playerIndex, move.color) * 0.1
+    return (
+      10 +
+      cardDemand(state, playerIndex, move.color) * 0.12 +
+      nobleDemand(state, playerIndex, move.color) * 2.2 -
+      (state.supply[move.color] <= 4 ? 2 : 0)
+    )
   }
   if (move.type === 'reserveMarket') {
     const card = state.market[move.tier].find((item) => item.id === move.cardId)
-    return card ? card.prestige * 9 + card.tier * 2 + (state.supply.gold > 0 ? 5 : 0) : -100
+    return card
+      ? card.prestige * 11 +
+          card.tier * 3 +
+          opponentPressure(state, playerIndex, card) * 0.8 +
+          (state.supply.gold > 0 ? 5 : 0)
+      : -100
   }
-  return move.type === 'reserveDeck' ? move.tier * 1.5 + (state.supply.gold > 0 ? 4 : 0) : 0
+  return move.type === 'reserveDeck' ? move.tier * 2 + (state.supply.gold > 0 ? 4 : 0) : 0
 }
 
 function stateValue(state: GameState, rootPlayer: number): number {
@@ -76,8 +125,20 @@ function stateValue(state: GameState, rootPlayer: number): number {
   const affordable = [...state.market[1], ...state.market[2], ...state.market[3]].filter((card) =>
     canAfford(player, card)
   ).length
-  let value = (player.prestige - strongestOpponent) * 75 + player.prestige * 18
-  value += bonusTotal * 7 + tokenFlexibility * 1.2 + affordable * 3
+  const progress = Math.min(1, player.prestige / state.targetPrestige)
+  const opponentFinisher = opponents.reduce((best, opponent) => {
+    const threat = [...state.market[1], ...state.market[2], ...state.market[3]].reduce((max, card) => {
+      return canAfford(opponent, card) && opponent.prestige + card.prestige >= state.targetPrestige
+        ? Math.max(max, card.prestige + 1)
+        : max
+    }, 0)
+    return Math.max(best, threat)
+  }, 0)
+  let value = (player.prestige - strongestOpponent) * 82 + player.prestige * 16
+  value += progress * 58 + bonusTotal * 8 + tokenFlexibility * 1.15 + affordable * 4
+  value -= Math.max(0, totalTokens(player.tokens) - 7) * 7
+  value -= opponentFinisher * 36
+  if (player.prestige >= state.targetPrestige) value += 800
   if (state.result) {
     value += state.result.winnerIds.includes(player.id) ? 5000 : -5000
   }
@@ -88,9 +149,10 @@ function chooseWeighted(state: GameState, moves: Move[], playerIndex: number, se
   const ranked = [...moves].sort(
     (a, b) => immediateMoveScore(state, b, playerIndex) - immediateMoveScore(state, a, playerIndex)
   )
-  const pool = ranked.slice(0, Math.min(5, ranked.length))
-  const pick = randomIndex(seed, pool.length)
-  return pool[pick.index]
+  const bestScore = immediateMoveScore(state, ranked[0], playerIndex)
+  const tied = ranked.filter((move) => Math.abs(immediateMoveScore(state, move, playerIndex) - bestScore) < 0.01)
+  const pick = randomIndex(seed, tied.length)
+  return tied[pick.index]
 }
 
 function determinizeForPlayer(state: GameState, viewer: number, seed: number): GameState {
@@ -147,10 +209,10 @@ function rollout(state: GameState, rootPlayer: number, seed: number, depth: numb
 function hardMove(state: GameState, moves: Move[], playerIndex: number): Move {
   const candidates = [...moves]
     .sort((a, b) => immediateMoveScore(state, b, playerIndex) - immediateMoveScore(state, a, playerIndex))
-    .slice(0, 9)
+    .slice(0, 12)
   const stats = candidates.map(() => ({ visits: 0, total: 0 }))
   let randomState = (state.rngState ^ (state.actionCounter * 0x9e3779b9)) >>> 0
-  const iterations = Math.max(32, candidates.length * 5)
+  const iterations = Math.max(64, candidates.length * 6)
 
   for (let iteration = 0; iteration < iterations; iteration += 1) {
     let selected = stats.findIndex((stat) => stat.visits === 0)
@@ -169,7 +231,7 @@ function hardMove(state: GameState, moves: Move[], playerIndex: number): Move {
     const determinized = determinizeForPlayer(state, playerIndex, randomState)
     randomState = nextRandom(randomState).state
     const applied = applyMove(determinized, candidates[selected])
-    const reward = applied.ok ? rollout(applied.state, playerIndex, randomState, 5) : -5000
+    const reward = applied.ok ? rollout(applied.state, playerIndex, randomState, 6) : -5000
     stats[selected].visits += 1
     stats[selected].total += reward
     randomState = nextRandom(randomState).state

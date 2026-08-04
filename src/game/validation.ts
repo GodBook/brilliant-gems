@@ -77,6 +77,7 @@ const gameState = z
     schemaVersion: z.literal(1),
     seed: nonNegativeInteger,
     rngState: nonNegativeInteger,
+    targetPrestige: z.number().int().min(5).max(50).default(15),
     players: z.array(player).min(2).max(4),
     currentPlayer: nonNegativeInteger,
     round: z.number().int().positive(),
@@ -98,7 +99,9 @@ const snapshot = z.object({
   config: z.object({
     seed: nonNegativeInteger,
     playerName: z.string().min(1).max(24),
-    aiDifficulties: z.array(difficulty).min(1).max(3)
+    aiDifficulties: z.array(difficulty).min(1).max(3),
+    targetPrestige: z.number().int().min(5).max(50).default(15),
+    playerSeat: z.number().int().min(1).max(4).default(1)
   }),
   game: gameState
 })

@@ -18,6 +18,15 @@ describe('存档结构校验', () => {
     expect(parseSnapshot(snapshot())).not.toBeNull()
   })
 
+  it('兼容缺少新增目标字段的旧存档并使用 15 点默认值', () => {
+    const value = structuredClone(snapshot()) as unknown as { config: Record<string, unknown>; game: Record<string, unknown> }
+    delete value.config.targetPrestige
+    delete value.game.targetPrestige
+    const parsed = parseSnapshot(value)
+    expect(parsed?.config.targetPrestige).toBe(15)
+    expect(parsed?.game.targetPrestige).toBe(15)
+  })
+
   it('拒绝损坏的待处理动作', () => {
     const value = structuredClone(snapshot()) as unknown as { game: { pending: unknown } }
     value.game.pending = { kind: 'discard', playerId: 'player-0', count: -2 }

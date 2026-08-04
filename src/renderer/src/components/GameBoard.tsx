@@ -47,7 +47,7 @@ export function GameBoard({
   const [selectedDeck, setSelectedDeck] = useState<Tier | null>(null)
   const [logOpen, setLogOpen] = useState(true)
   const player = game.players[game.currentPlayer]
-  const human = game.players[0]
+  const human = game.players.find((item) => item.isHuman) ?? game.players[0]
   const isHumanTurn = player.isHuman && !game.result
   const canUseBoard = isHumanTurn && !game.pending
   const chosenCard = selectedCard ? getCardFromSource(game, selectedCard) : undefined
@@ -96,7 +96,7 @@ export function GameBoard({
     <main className={`game-screen ${settings.reducedMotion ? 'reduce-motion' : ''}`}>
       <header className="game-toolbar">
         <button type="button" className="icon-button" onClick={handleMenu} aria-label="返回主菜单" title="返回主菜单"><ArrowLeft /></button>
-        <div className="game-title-lockup"><img src="assets/crest.svg" alt="" /><strong>璀璨宝石</strong><span>第 {game.round} 轮</span></div>
+        <div className="game-title-lockup"><img src="assets/crest.svg" alt="" /><strong>璀璨宝石</strong><span>第 {game.round} 轮 · 目标 {game.targetPrestige}</span></div>
         <div className="turn-banner" aria-live="polite">
           <span className={`turn-dot ${isHumanTurn ? 'human' : 'ai'}`} />
           <strong>{game.result ? '对局结束' : isHumanTurn ? '你的回合' : `${player.name}思考中`}</strong>
@@ -117,9 +117,18 @@ export function GameBoard({
       </header>
 
       <div className="opponents-row">
-        {game.players.slice(1).map((opponent, index) => (
-          <PlayerStrip key={opponent.id} player={opponent} active={game.currentPlayer === index + 1 && !game.result} />
-        ))}
+        {game.players.filter((opponent) => !opponent.isHuman).map((opponent) => {
+          const opponentIndex = game.players.indexOf(opponent)
+          return (
+            <PlayerStrip
+              key={opponent.id}
+              player={opponent}
+              active={game.currentPlayer === opponentIndex && !game.result}
+              showTokens={settings.showOpponentTokens}
+              showReserved={settings.showOpponentReserved}
+            />
+          )
+        })}
       </div>
 
       <div className={`game-workspace ${logOpen ? '' : 'log-collapsed'}`}>
@@ -171,6 +180,7 @@ export function GameBoard({
             selectedCardId={selectedCard?.cardId ?? null}
             selectedDeck={selectedDeck}
             interactive={canUseBoard}
+            markAffordable={settings.markAffordableCards}
             onCard={selectMarketCard}
             onDeck={(tier) => {
               setSelectedGems([])
@@ -205,7 +215,7 @@ export function GameBoard({
         {logOpen ? <TurnLog game={game} /> : null}
       </div>
 
-      <PlayerDock game={game} selectedCardId={selectedCard?.cardId ?? null} interactive={canUseBoard} onReserve={selectReserve} />
+      <PlayerDock game={game} selectedCardId={selectedCard?.cardId ?? null} interactive={canUseBoard} markAffordable={settings.markAffordableCards} onReserve={selectReserve} />
 
       {aiThinking ? <div className="ai-thinking" aria-live="polite"><span /><span /><span />{player.name}正在权衡市场</div> : null}
       {game.pending?.kind === 'discard' && game.pending.playerId === human.id ? <DiscardDialog game={game} onMove={onMove} /> : null}
@@ -215,10 +225,11 @@ export function GameBoard({
   )
 }
 
-function PlayerDock({ game, selectedCardId, interactive, onReserve }: { game: GameState; selectedCardId: string | null; interactive: boolean; onReserve: (id: string) => void }) {
-  const player = game.players[0]
+function PlayerDock({ game, selectedCardId, interactive, markAffordable, onReserve }: { game: GameState; selectedCardId: string | null; interactive: boolean; markAffordable: boolean; onReserve: (id: string) => void }) {
+  const player = game.players.find((item) => item.isHuman) ?? game.players[0]
+  const playerIndex = game.players.indexOf(player)
   return (
-    <section className={`player-dock ${game.currentPlayer === 0 && !game.result ? 'is-active' : ''}`} aria-label="你的商会">
+    <section className={`player-dock ${game.currentPlayer === playerIndex && !game.result ? 'is-active' : ''}`} aria-label="你的商会">
       <div className="human-profile"><span className="human-seal">{player.name.slice(0, 1)}</span><div><strong>{player.name}</strong><span>你的商会</span></div><div className="human-score"><b>{player.prestige}</b><span>威望</span></div></div>
       <div className="dock-assets">
         <div><span className="dock-label">筹码 · {totalTokens(player.tokens)}/10</span><div className="asset-row">{TOKEN_GEMS.map((color) => <GemAmount key={color} color={color} count={player.tokens[color]} />)}</div></div>
@@ -226,7 +237,7 @@ function PlayerDock({ game, selectedCardId, interactive, onReserve }: { game: Ga
       </div>
       <div className="reserved-area"><span className="dock-label">保留牌 · {player.reserved.length}/3</span><div className="reserved-list">
         {player.reserved.map(({ card }) => (
-          <DevelopmentCardView key={card.id} card={card} player={player} compact selected={selectedCardId === card.id} disabled={!interactive} onSelect={() => onReserve(card.id)} />
+          <DevelopmentCardView key={card.id} card={card} player={player} compact markAffordable={markAffordable} selected={selectedCardId === card.id} disabled={!interactive} onSelect={() => onReserve(card.id)} />
         ))}
         {Array.from({ length: 3 - player.reserved.length }, (_, index) => <span key={index} className="reserve-slot" />)}
       </div></div>
@@ -250,7 +261,7 @@ function TurnLog({ game }: { game: GameState }) {
 }
 
 function DiscardDialog({ game, onMove }: { game: GameState; onMove: (move: Move) => void }) {
-  const player = game.players[0]
+  const player = game.players.find((item) => item.isHuman) ?? game.players[0]
   const needed = game.pending?.kind === 'discard' ? game.pending.count : 0
   const [selected, setSelected] = useState<ResourceBag>(emptyBag())
   const count = totalTokens(selected)
@@ -301,4 +312,3 @@ function ResultDialog({ game, onMenu, onNewGame }: { game: GameState; onMenu: ()
     </section></div>
   )
 }
-

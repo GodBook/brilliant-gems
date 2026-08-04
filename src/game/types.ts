@@ -76,6 +76,7 @@ export interface GameState {
   schemaVersion: 1
   seed: number
   rngState: number
+  targetPrestige: number
   players: PlayerState[]
   currentPlayer: number
   round: number
@@ -94,6 +95,8 @@ export interface GameConfig {
   seed: number
   playerName: string
   aiDifficulties: Difficulty[]
+  targetPrestige?: number
+  playerSeat?: number
 }
 
 export type CardSource =
@@ -121,4 +124,3 @@ export interface SaveSnapshotV1 {
   config: GameConfig
   game: GameState
 }
-

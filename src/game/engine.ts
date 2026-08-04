@@ -44,6 +44,9 @@ export function setupGame(config: GameConfig): GameState {
   if (config.aiDifficulties.length < 1 || config.aiDifficulties.length > 3) {
     throw new Error('AI 数量必须为 1 到 3 个')
   }
+  const targetPrestige = Number.isInteger(config.targetPrestige)
+    ? Math.min(50, Math.max(5, config.targetPrestige as number))
+    : 15
 
   let rngState = config.seed >>> 0
   const decks = {} as Record<Tier, DevelopmentCard[]>
@@ -56,31 +59,38 @@ export function setupGame(config: GameConfig): GameState {
   const nobleShuffle = shuffleWithSeed(NOBLES, rngState)
   rngState = nobleShuffle.state
 
-  const players: PlayerState[] = [
-    {
-      id: 'player-0',
-      name: config.playerName.trim() || '玩家',
-      isHuman: true,
-      tokens: emptyBag(),
-      bonuses: emptyCost(),
-      purchased: [],
-      reserved: [],
-      nobles: [],
-      prestige: 0
-    },
-    ...config.aiDifficulties.map((difficulty, index) => ({
-      id: `player-${index + 1}`,
-      name: AI_NAMES[index],
-      isHuman: false,
-      difficulty,
-      tokens: emptyBag(),
-      bonuses: emptyCost(),
-      purchased: [],
-      reserved: [],
-      nobles: [],
-      prestige: 0
-    }))
-  ]
+  const human: PlayerState = {
+    id: 'player-0',
+    name: config.playerName.trim() || '玩家',
+    isHuman: true,
+    tokens: emptyBag(),
+    bonuses: emptyCost(),
+    purchased: [],
+    reserved: [],
+    nobles: [],
+    prestige: 0
+  }
+  const opponents = config.aiDifficulties.map((difficulty, index) => ({
+    id: `player-${index + 1}`,
+    name: AI_NAMES[index],
+    isHuman: false,
+    difficulty,
+    tokens: emptyBag(),
+    bonuses: emptyCost(),
+    purchased: [],
+    reserved: [],
+    nobles: [],
+    prestige: 0
+  }))
+  const seat = Number.isInteger(config.playerSeat)
+    ? Math.min(playersCount(config.aiDifficulties), Math.max(1, config.playerSeat as number))
+    : 1
+  const players: PlayerState[] = []
+  let opponentIndex = 0
+  for (let index = 1; index <= opponents.length + 1; index += 1) {
+    if (index === seat) players.push(human)
+    else players.push(opponents[opponentIndex++])
+  }
 
   const coloredTokenCount = players.length === 2 ? 4 : players.length === 3 ? 5 : 7
   const supply = emptyBag()
@@ -91,6 +101,7 @@ export function setupGame(config: GameConfig): GameState {
     schemaVersion: 1,
     seed: config.seed >>> 0,
     rngState,
+    targetPrestige,
     players,
     currentPlayer: 0,
     round: 1,
@@ -110,12 +121,16 @@ export function setupGame(config: GameConfig): GameState {
         id: 1,
         round: 1,
         playerId: 'system',
-        text: `${players.length} 人对局开始，率先达到 15 点将触发最后一轮。`,
+        text: `${players.length} 人对局开始，率先达到 ${targetPrestige} 点将触发最后一轮。`,
         tone: 'system'
       }
     ],
     actionCounter: 1
   }
+}
+
+function playersCount(aiDifficulties: GameConfig['aiDifficulties']): number {
+  return aiDifficulties.length + 1
 }
 
 function addLog(
@@ -173,9 +188,9 @@ function calculateResult(players: PlayerState[]): GameResult {
 
 function finishTurn(state: GameState): void {
   const player = state.players[state.currentPlayer]
-  if (!state.endTriggeredBy && player.prestige >= 15) {
+  if (!state.endTriggeredBy && player.prestige >= state.targetPrestige) {
     state.endTriggeredBy = player.id
-    addLog(state, 'system', `${player.name} 达到 15 点，本轮结束后结算。`, 'system')
+    addLog(state, 'system', `${player.name} 达到 ${state.targetPrestige} 点，本轮结束后结算。`, 'system')
   }
 
   const nextPlayer = (state.currentPlayer + 1) % state.players.length

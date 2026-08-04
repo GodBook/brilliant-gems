@@ -6,7 +6,9 @@ import type { GameConfig, GameState, Move } from './types'
 export const DEFAULT_GAME_CONFIG: GameConfig = {
   seed: 20260729,
   playerName: '玩家',
-  aiDifficulties: ['normal']
+  aiDifficulties: ['normal'],
+  targetPrestige: 15,
+  playerSeat: 1
 }
 
 export const SplendorBoardgame: Game<GameState> = {

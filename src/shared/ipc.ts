@@ -12,6 +12,9 @@ export interface AppSettings {
   reducedMotion: boolean
   fullscreen: boolean
   aiSpeed: 1 | 2 | 0
+  showOpponentTokens: boolean
+  showOpponentReserved: boolean
+  markAffordableCards: boolean
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -19,7 +22,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   effectsVolume: 0.55,
   reducedMotion: false,
   fullscreen: false,
-  aiSpeed: 1
+  aiSpeed: 1,
+  showOpponentTokens: true,
+  showOpponentReserved: true,
+  markAffordableCards: true
 }
 
 export interface DesktopApi {
